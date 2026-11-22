@@ -34,6 +34,9 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run release -- --published
+      - name: Install and uninstall the real installer
+        shell: pwsh
+        run: ./scripts/test-installer.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: windows
