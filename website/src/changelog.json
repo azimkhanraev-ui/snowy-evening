@@ -1,0 +1,22 @@
+[
+  {
+    "version": "1.0.0",
+    "date": null,
+    "changes": {
+      "ru": [
+        "Два режима: живые обои и слой поверх окон",
+        "Снег с ветром, сугробы и снегоуборщик",
+        "Шесть периодов суток, домик и гирлянды",
+        "Свой фон, автозапуск и пауза в играх",
+        "Установщик и portable-версия, интерфейс на русском и английском"
+      ],
+      "en": [
+        "Two modes: live wallpaper and a layer over windows",
+        "Wind-blown snow, drifts and a snow plow",
+        "Six times of day, a house and string lights",
+        "Custom background, autostart and pause for games",
+        "Installer and portable builds, Russian and English interface"
+      ]
+    }
+  }
+]

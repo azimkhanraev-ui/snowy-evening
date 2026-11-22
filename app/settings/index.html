@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Snowy Evening</title>
+    <link rel="stylesheet" href="settings.css">
+  </head>
+  <body>
+    <header>
+      <img src="../assets/icon.png" width="52" height="52" alt="">
+      <div>
+        <h1 data-t="appName"></h1>
+        <p id="version"></p>
+      </div>
+    </header>
+
+    <main>
+      <fieldset>
+        <legend data-t="mode"></legend>
+        <div class="modes">
+          <label class="choice">
+            <input type="radio" name="mode" value="wallpaper">
+            <span><b data-t="wallpaper"></b><small data-t="wallpaperHint"></small></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="mode" value="overlay">
+            <span><b data-t="overlay"></b><small data-t="overlayHint"></small></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-t="timeOfDay"></legend>
+        <div class="periods" id="periods"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-t="weather"></legend>
+        <label class="row"><span data-t="snow"></span><input type="range" name="snow" min="0" max="100"><output id="snow-value"></output></label>
+        <label class="row"><span data-t="wind"></span><input type="range" name="wind" min="-100" max="100"><output id="wind-value"></output></label>
+      </fieldset>
+
+      <fieldset>
+        <legend data-t="scene"></legend>
+        <div class="toggles">
+          <label class="check"><input type="checkbox" name="plow"><span data-t="plow"></span></label>
+          <label class="check"><input type="checkbox" name="house"><span data-t="house"></span></label>
+          <label class="check"><input type="checkbox" name="lights"><span data-t="lights"></span></label>
+        </div>
+        <div class="background">
+          <span><b data-t="background"></b><small data-t="backgroundHint"></small></span>
+          <button type="button" id="choose" data-t="choose"></button>
+          <button type="button" id="reset" data-t="reset"></button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-t="performance"></legend>
+        <label class="check"><input type="checkbox" id="autostart"><span data-t="autostart"></span></label>
+        <label class="check"><input type="checkbox" name="pauseInGames"><span data-t="pauseInGames"></span></label>
+        <label class="check"><input type="checkbox" name="pauseWhenCovered"><span data-t="pauseWhenCovered"></span></label>
+        <label class="row">
+          <span data-t="fps"></span>
+          <select name="fps"><option>15</option><option>30</option><option>60</option></select>
+        </label>
+        <label class="row">
+          <span data-t="language"></span>
+          <select name="language">
+            <option value="auto" data-t="systemLanguage"></option>
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+      </fieldset>
+    </main>
+
+    <footer>
+      <p data-t="hotkey"></p>
+      <p data-t="privacy"></p>
+    </footer>
+
+    <script type="module" src="settings.js"></script>
+  </body>
+</html>

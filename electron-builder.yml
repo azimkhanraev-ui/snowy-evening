@@ -1,0 +1,52 @@
+appId: io.github.azimkhanraevui.snowyevening
+productName: Snowy Evening
+copyright: MIT License, azimkhanraev-ui
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - app/**
+  - shared/**
+  - package.json
+  # Only C++ sources and docs: src/koffi also holds JavaScript that is needed at runtime.
+  - '!node_modules/koffi/{vendor,doc,lib}/**'
+  - '!node_modules/koffi/src/**/*.{cc,hh,inc,asm,S,txt}'
+  - '!node_modules/@koromix/**/*.lib'
+
+asar: true
+asarUnpack:
+  - node_modules/@koromix/**
+# koffi ships a prebuilt N-API binary
+npmRebuild: false
+electronLanguages: [en-US, ru]
+publish: null
+
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  artifactName: SnowyEvening-Setup.${ext}
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  include: build/installer.nsh
+
+portable:
+  artifactName: SnowyEvening-Portable.${ext}
+  requestExecutionLevel: user

@@ -1,0 +1,166 @@
+:root {
+  color-scheme: dark;
+  --text: #eef4ff;
+  --muted: #abb9da;
+  --line: #2b3a68;
+  --warm: #ffc46b;
+  accent-color: var(--warm);
+  font: 14px/1.45 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  min-height: 100vh;
+  color: var(--text);
+  background: linear-gradient(#0a1128, #1a2654) fixed;
+}
+
+header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 22px;
+}
+
+header p,
+footer,
+small {
+  color: var(--muted);
+}
+
+fieldset {
+  margin: 0 0 12px;
+  padding: 10px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #101a3a99;
+}
+
+legend {
+  padding: 0 6px;
+  color: var(--warm);
+  font-weight: 600;
+}
+
+b,
+small {
+  display: block;
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.choice:has(:checked) {
+  border-color: var(--warm);
+  background: #ffc46b14;
+}
+
+.periods,
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.periods {
+  gap: 7px;
+}
+
+.pill {
+  position: relative;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.pill input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.pill:has(:checked) {
+  color: #14182c;
+  border-color: var(--warm);
+  background: var(--warm);
+}
+
+.pill:has(:focus-visible),
+:focus-visible {
+  outline: 3px solid #8fd0ff;
+  outline-offset: 2px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(130px, auto) minmax(0, 1fr) 44px;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+}
+
+.background {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.background > span {
+  margin-right: auto;
+}
+
+button,
+select {
+  padding: 6px 12px;
+  color: var(--text);
+  font: inherit;
+  border: 1px solid #41538c;
+  border-radius: 8px;
+  background: #1b2954;
+}
+
+button:disabled {
+  opacity: 0.45;
+}
+
+footer {
+  padding: 4px;
+  font-size: 12px;
+}

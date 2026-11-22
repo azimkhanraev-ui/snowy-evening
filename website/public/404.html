@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>404 — Снежный вечер</title>
+    <!-- Hosts serve this file for any depth of URL, so everything is inline. -->
+    <style>
+      :root { color-scheme: dark; font: 17px/1.6 'Segoe UI', system-ui, sans-serif; }
+      body {
+        display: grid;
+        place-items: center;
+        margin: 0;
+        min-height: 100vh;
+        overflow-x: hidden;
+        color: #eef4ff;
+        text-align: center;
+        background: linear-gradient(#070d22, #1c2b5e 60%, #594f83);
+      }
+      main { padding: 24px; }
+      svg { width: min(340px, 86vw); height: auto; }
+      h1 { margin: 12px 0 4px; font-size: 1.8rem; }
+      p { color: #bfcae6; }
+      a {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 12px 24px;
+        color: #24180a;
+        font-weight: 700;
+        text-decoration: none;
+        background: #ffc46b;
+        border-radius: 14px;
+      }
+      a:focus-visible { outline: 3px solid #8fd0ff; outline-offset: 3px; }
+      .flakes { animation: drift 5s ease-in-out infinite alternate; }
+      @keyframes drift { to { transform: translateY(12px); } }
+      @media (prefers-reduced-motion: reduce) { .flakes { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg viewBox="0 0 340 190" aria-hidden="true">
+        <g class="flakes" fill="#fff">
+          <circle cx="30" cy="24" r="3"/><circle cx="84" cy="52" r="2"/><circle cx="150" cy="18" r="3"/>
+          <circle cx="215" cy="44" r="2"/><circle cx="280" cy="22" r="4"/><circle cx="318" cy="70" r="2"/>
+        </g>
+        <text x="170" y="122" text-anchor="middle" font-size="92" font-weight="700" fill="#ffd58f">404</text>
+        <path d="M10 180c25-42 72-48 112-28 34-30 92-30 120-2 36-18 70-6 88 30z" fill="#dcebfb"/>
+      </svg>
+      <h1 id="title">Эту страницу замело снегом</h1>
+      <p id="text">Такой страницы нет или она переехала.</p>
+      <a id="home" href="/">На главную</a>
+    </main>
+    <script>
+      // A GitHub project site lives in /<repository>/, other hosts use the root.
+      var first = location.pathname.split('/')[1];
+      if (/\.github\.io$/.test(location.hostname) && first) {
+        document.getElementById('home').href = '/' + first + '/';
+      }
+      var language = null;
+      try { language = localStorage.getItem('language'); } catch (error) {}
+      if (!language) language = /^(ru|be|kk)\b/i.test(navigator.language) ? 'ru' : 'en';
+      if (language === 'en') {
+        document.documentElement.lang = 'en';
+        document.title = '404 — Snowy Evening';
+        document.getElementById('title').textContent = 'This page is buried in snow';
+        document.getElementById('text').textContent = 'It does not exist or has moved.';
+        document.getElementById('home').textContent = 'Go to the home page';
+      }
+    </script>
+  </body>
+</html>

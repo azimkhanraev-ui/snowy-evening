@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0",
+  "published": false,
+  "date": "2026-11-22T16:46:54.808Z",
+  "files": {
+    "installer": {
+      "name": "SnowyEvening-Setup.exe",
+      "url": "https://github.com/azimkhanraev-ui/snowy-evening/releases/latest/download/SnowyEvening-Setup.exe",
+      "size": 113119635,
+      "sha256": "954d0310ed4c1d0e30d30aa6f926e1d78f4a0392d8c86ae7f32964943f0d7347"
+    },
+    "portable": {
+      "name": "SnowyEvening-Portable.exe",
+      "url": "https://github.com/azimkhanraev-ui/snowy-evening/releases/latest/download/SnowyEvening-Portable.exe",
+      "size": 103039786,
+      "sha256": "0b0134ee4bef60fb8ae14ab30cc9687fed2dcb12094f8c4f7a4c8c745567092d"
+    }
+  }
+}

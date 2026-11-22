@@ -1,0 +1,140 @@
+# Снежный вечер (Snowy Evening)
+
+Живая зима на рабочем столе Windows 10/11 x64: снег, снегоуборщик, домик с гирляндами и шесть периодов суток. Работает офлайн и ничего не собирает.
+
+- **Живые обои**: вся сцена за значками рабочего стола, можно поставить свой фон.
+- **Поверх окон**: прозрачный слой над программами, клики проходят насквозь.
+
+Управление находится в значке у часов. Пауза: `Ctrl + Alt + Shift + S`.
+
+## Разработка
+
+Нужен [Node.js](https://nodejs.org) 22.12 или новее (лучше 24 LTS):
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+```
+
+Откройте новый терминал в папке проекта. Если PowerShell запрещает запуск `npm.ps1`, пишите `npm.cmd` вместо `npm`.
+
+| Команда | Что делает |
+| --- | --- |
+| `npm ci` | устанавливает зависимости |
+| `npm start` | запускает программу из исходников |
+| `npm test` | запускает тесты |
+| `npm run site:dev` | открывает сайт локально для разработки |
+| `npm run site:build` | собирает сайт в `website/dist` |
+| `npm run site:preview` | показывает собранный сайт |
+| `npm run site:sync` | записывает в `version.json` данные опубликованного релиза |
+| `npm run release` | собирает установщик и portable в `release/`, проверяет запуск, пишет `version.json` и SHA-256 |
+
+`website/dist/index.html` не работает двойным кликом, потому что браузер блокирует модули с `file://`. Используйте `npm run site:preview`.
+
+```
+app/                 программа на Electron
+  main.js            трей, настройки, жизненный цикл
+  scenes.js          окна на каждом мониторе, режимы, пауза
+  win32.js           встраивание за значки через Win32
+  offline.js         блокировка сети
+shared/engine/       движок сцены, общий для программы и сайта
+website/             сайт на Vite, без бэкенда
+scripts/             релиз и version.json
+build/               иконка и дополнение к установщику
+test/                тесты
+.github/workflows/   release.yml и pages.yml
+```
+
+## Как опубликовать сайт и релиз
+
+Репозиторий должен быть **публичным**, иначе посетители не смогут скачать файлы из Releases, а Pages на бесплатном тарифе не заработает.
+
+В примерах используется `azimkhanraev-ui/snowy-evening`. Для другого имени **до первой отправки** замените `repository.url` в `package.json` и ссылки ниже.
+
+### Шаг 1. Создайте репозиторий и залейте код
+
+Через GitHub CLI:
+
+```powershell
+gh repo create snowy-evening --public --source . --remote origin --push
+```
+
+Или через браузер: откройте <https://github.com/new>, имя `snowy-evening`, тип Public, без README, лицензии и .gitignore. Затем:
+
+```powershell
+git remote add origin https://github.com/azimkhanraev-ui/snowy-evening.git
+git push -u origin main
+```
+
+Первый запуск workflow **Website** завершится ошибкой, потому что Pages ещё не включён. Это ожидаемо.
+
+### Шаг 2. Включите GitHub Pages
+
+1. В репозитории откройте **Settings → Pages**.
+2. В **Build and deployment → Source** выберите **GitHub Actions**.
+
+### Шаг 3. Создайте первый релиз
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+На вкладке **Actions** workflow **Release** соберёт программу на Windows, создаст релиз с двумя .exe, обновит `version.json` и запустит **Website**.
+
+### Шаг 4. Проверьте
+
+- Сайт: <https://azimkhanraev-ui.github.io/snowy-evening/>
+- Установщик: <https://github.com/azimkhanraev-ui/snowy-evening/releases/latest/download/SnowyEvening-Setup.exe>
+- Portable: <https://github.com/azimkhanraev-ui/snowy-evening/releases/latest/download/SnowyEvening-Portable.exe>
+
+### Следующие версии
+
+```powershell
+git pull                                    # забрать version.json от GitHub Actions
+npm version 1.1.0 --no-git-tag-version
+# добавьте 1.1.0 первой записью в website/src/changelog.json,
+# а прошлой версии впишите дату выпуска
+npm test
+git add -A
+git commit -m "Release 1.1.0"
+git tag v1.1.0
+git push origin main v1.1.0
+```
+
+Тег должен совпадать с версией в `package.json`, иначе сборка остановится.
+
+### Альтернатива: Netlify или Cloudflare Pages
+
+Файлы .exe всё равно берутся из GitHub Releases, поэтому шаги 1 и 3 нужны. Когда релиз появится:
+
+```powershell
+$env:SITE_URL = "https://адрес-вашего-сайта/"   # для canonical, OpenGraph и sitemap
+npm run site:sync
+npm run site:build
+```
+
+- **Netlify**: войдите и перетащите `website/dist` на <https://app.netlify.com/drop>.
+- **Cloudflare Pages**: в панели откройте Workers & Pages, создайте проект Pages с прямой загрузкой (Direct Upload) и перетащите `website/dist`.
+
+После каждого релиза повторяйте эти команды и загрузку.
+
+### Если что-то не получилось
+
+| Симптом | Решение |
+| --- | --- |
+| Website падает на `configure-pages` | Выполните шаг 2, затем Actions → Website → Run workflow |
+| На сайте «Первый релиз готовится» | Релиза ещё нет либо сайт собран до него. Запустите Website вручную или `site:sync` и `site:build` |
+| Не обновился `version.json` в main | Ветка защищена от записи. Сайт всё равно берёт данные из релиза |
+| Push отклонён из-за workflow | `gh auth refresh -s workflow` |
+| robots.txt не виден поисковикам | На `*.github.io/<репозиторий>/` они его не читают. Добавьте sitemap в Search Console или подключите свой домен |
+
+## Ограничения
+
+- Файлы не подписаны сертификатом, поэтому Windows покажет SmartScreen.
+- Живые обои опираются на недокументированное поведение Проводника и могут сломаться после крупного обновления Windows. Если встроиться не удалось, программа переключается в режим поверх окон.
+- Слой поверх окон не виден над играми в эксклюзивном полноэкранном режиме и над окнами UAC.
+- Автообновления нет намеренно: программа не выходит в сеть.
+
+## Лицензия
+
+[MIT](LICENSE)

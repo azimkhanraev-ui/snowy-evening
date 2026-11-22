@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-i18n="privacy.metaTitle">Политика конфиденциальности — Снежный вечер</title>
+    <meta name="description" content="«Снежный вечер» работает офлайн, ничего не собирает и не отправляет." data-i18n-attr="content:privacy.metaDescription">
+    <meta name="theme-color" content="#0b1330">
+    <link rel="canonical" href="%SITE_URL%privacy.html">
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="Политика конфиденциальности — Снежный вечер">
+    <meta property="og:description" content="Программа работает офлайн, ничего не собирает и не отправляет.">
+    <meta property="og:url" content="%SITE_URL%privacy.html">
+    <meta property="og:image" content="%SITE_URL%og.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" href="./favicon.ico" sizes="48x48">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./src/styles.css">
+    <script type="module" src="./src/privacy.js"></script>
+  </head>
+
+  <body>
+    <a class="skip" href="#main" data-i18n="nav.skip">К содержанию</a>
+    <canvas class="ambient" id="ambient" aria-hidden="true"></canvas>
+
+    <header class="topbar">
+      <div class="wrap">
+        <a class="brand" href="./">
+          <img src="./favicon.svg" width="34" height="34" alt="">
+          <span data-i18n="brand">Снежный вечер</span>
+        </a>
+        <div class="languages" role="group" aria-label="Язык / Language">
+          <button type="button" data-lang="ru" lang="ru">RU</button>
+          <button type="button" data-lang="en" lang="en">EN</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1" class="section wrap narrow prose">
+      <h1 data-i18n="privacy.title">Политика конфиденциальности</h1>
+      <p class="promise" data-i18n="privacy.summary">Программа работает офлайн, ничего не собирает и не отправляет.</p>
+
+      <h2 data-i18n="privacy.app.title">Программа</h2>
+      <ul>
+        <li data-i18n="privacy.app.1">Нет аккаунтов, телеметрии, рекламы, отчётов о сбоях и автообновления.</li>
+        <li data-i18n="privacy.app.2">Сетевые запросы внутри программы заблокированы.</li>
+        <li data-i18n="privacy.app.3">Настройки и копия выбранного фона хранятся только на вашем компьютере, в папке %APPDATA%\Snowy Evening.</li>
+        <li data-i18n="privacy.app.4">Чтобы вовремя встать на паузу, программа проверяет размер, положение и тип активного окна. Заголовки и содержимое окон она не читает и ничего об окнах не сохраняет.</li>
+        <li data-i18n="privacy.app.5">Если включить автозапуск, создаётся одна запись в реестре текущего пользователя.</li>
+      </ul>
+
+      <h2 data-i18n="privacy.site.title">Сайт</h2>
+      <ul>
+        <li data-i18n="privacy.site.1">Нет cookie, аналитики, трекеров и сторонних шрифтов или скриптов.</li>
+        <li data-i18n="privacy.site.2">Выбранный язык сохраняется в localStorage вашего браузера и никуда не отправляется.</li>
+        <li data-i18n="privacy.site.3">Сайт и файлы размещаются у сторонних хостингов, например GitHub. Как любой хостинг, они видят IP-адрес и технические данные запроса и обрабатывают их по своим правилам. Автор программы этих журналов не получает.</li>
+      </ul>
+
+      <p><a href="./" data-i18n="privacy.back">Вернуться на главную</a></p>
+    </main>
+  </body>
+</html>
