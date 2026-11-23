@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('winter', {
   scene: {
     get: () => ipcRenderer.invoke('scene:get'),
     onChange: listen('scene:state'),
+    onDesktop: listen('scene:desktop'),
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),

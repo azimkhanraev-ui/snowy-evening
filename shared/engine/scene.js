@@ -1,4 +1,5 @@
-import { LIGHT_COLORS, clamp, disc, softDot, surface } from './draw.js';
+import { LIGHT_COLORS, clamp, disc, mix, softDot, surface } from './draw.js';
+import { DesktopSnow } from './desktop.js';
 import { PERIODS } from './periods.js';
 import { drawLandscape } from './landscape.js';
 import { CHIMNEY, drawHouse, drawHouseLights } from './house.js';
@@ -17,6 +18,7 @@ const DEFAULTS = {
   fps: 30,
   transparent: false, // overlay: no landscape, only the moving things
   cover: true, // snow settling on the ground
+  coverRate: 1, // how fast the ground snow grows, the site demo speeds it up
   background: null, // an HTMLImageElement that replaces the painted landscape
   bottomInset: 0, // space hidden behind the taskbar
   houseX: 0.8,
@@ -27,6 +29,8 @@ const DEFAULTS = {
 const REPAINT = ['period', 'house', 'transparent', 'background', 'bottomInset', 'houseX'];
 const FADE_SECONDS = 1.2;
 const PLOW_SPEED = 78;
+// The plow sets out once the road snow is this deep on average (scene units).
+const PLOW_TRIGGER = 16;
 
 export class WinterScene {
   constructor(canvas, options = {}) {
@@ -35,6 +39,7 @@ export class WinterScene {
     this.options = { ...DEFAULTS, ...options };
     this.snowfall = new Snowfall();
     this.cover = new SnowCover();
+    this.desktop = new DesktopSnow();
     this.dots = {
       flake: softDot('#f4f9ff', 0.35),
       smoke: softDot('#c5cfe2'),
@@ -43,7 +48,7 @@ export class WinterScene {
     };
     this.time = 0;
     this.fade = 0;
-    this.truck = { x: 0, direction: 1, wait: 0, distance: 0 };
+    this.truck = { x: 0, direction: 1, distance: 0, active: false };
     this.frameId = 0;
     this.view = null;
     this.resize();
@@ -89,8 +94,6 @@ export class WinterScene {
     if (old) {
       this.snowfall.resize(width / old.w, height / old.h);
       this.truck.x *= width / old.w;
-    } else {
-      this.truck.x = width * 0.3;
     }
     this.snowfall.update(0, this.time, this.view, this.options.snow, 0);
     this.still = null;
@@ -160,25 +163,55 @@ export class WinterScene {
 
   advance(dt) {
     if (!this.view) return;
-    const { snow, wind, plow, cover } = this.options;
+    const { snow, wind, plow, cover, coverRate } = this.options;
     this.time += dt;
     this.snowfall.update(dt, this.time, this.view, snow, wind);
-    if (cover) this.cover.update(dt, this.view.objectScale, snow);
-    if (plow) this.drive(dt);
+    if (cover) this.cover.update(dt, this.view.objectScale, snow, coverRate);
+    this.desktop.update(dt, this.world());
+    if (plow && cover) this.drive(dt);
+    else this.truck.active = false;
     if (this.fade > 0) {
       this.fade -= dt;
       if (this.fade <= 0) this.previous = null;
     }
   }
 
+  /** How the snow on the icons meets the ground. */
+  world() {
+    const { w, h, road } = this.view;
+    const floor = h - this.options.bottomInset;
+    const cover = this.options.cover;
+    return {
+      w, h,
+      amount: this.options.snow,
+      groundAt: (x) => (cover ? road + 2 - this.cover.heightAt(x) : floor),
+      addToGround: (x, size) => cover && this.cover.add(x, size),
+      takeFromGround: (x, size) => (cover ? this.cover.take(x, size) : 0),
+    };
+  }
+
+  /** Icon pictures on the desktop, [{ x, y, size }] in canvas pixels. */
+  setIcons(icons) {
+    this.desktop.setIcons(icons);
+    if (!this.running) this.render();
+  }
+
+  /** The mouse over the desktop, { x, y, primary, middle } or null. */
+  setPointer(pointer) {
+    this.desktop.setPointer(pointer);
+  }
+
+  /** The plow only sets out when the road is snowed in, then crosses the screen once. */
   drive(dt) {
     const truck = this.truck;
-    if (truck.wait > 0) {
-      truck.wait -= dt;
-      return;
-    }
     const { w, u, road, objectScale } = this.view;
     const scale = objectScale * 0.9;
+    const margin = HALF_LENGTH * scale + 20;
+    if (!truck.active) {
+      if (this.cover.depth() < PLOW_TRIGGER) return;
+      truck.active = true;
+      truck.x = truck.direction > 0 ? -margin : w + margin;
+    }
     const step = PLOW_SPEED * u * dt;
     const blade = truck.x + truck.direction * BLADE_X * scale;
 
@@ -186,10 +219,9 @@ export class WinterScene {
     truck.distance += step / scale;
     if (this.options.cover) this.cover.clear(blade, blade + truck.direction * step, road, objectScale, truck.direction);
 
-    const margin = HALF_LENGTH * scale + 20;
     if ((truck.direction > 0 && truck.x > w + margin) || (truck.direction < 0 && truck.x < -margin)) {
       truck.direction *= -1;
-      truck.wait = 4;
+      truck.active = false;
     }
   }
 
@@ -220,7 +252,7 @@ export class WinterScene {
     if (options.lights && options.transparent) this.drawTopGarland();
 
     if (options.cover) this.cover.drawCover(g, road, options.transparent ? '#e6f0fb' : period.snow[0]);
-    if (options.plow && this.truck.wait <= 0) {
+    if (options.plow && this.truck.active) {
       const scale = objectScale * 0.9;
       g.save();
       g.translate(this.truck.x, road + 2);
@@ -229,6 +261,8 @@ export class WinterScene {
       g.restore();
     }
     if (options.cover) this.cover.drawSpray(g, dots.flake);
+    // Brighter than the landscape snow, so it reads as snow on any wallpaper.
+    this.desktop.draw(g, mix(period.snow[0], '#ffffff', 0.6), mix(period.snow[1], '#ffffff', 0.35));
     this.snowfall.draw(g, this.view, dots.flake);
   }
 

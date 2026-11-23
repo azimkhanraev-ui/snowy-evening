@@ -1,7 +1,23 @@
 [
   {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "date": null,
+    "changes": {
+      "ru": [
+        "Снег копится на значках рабочего стола в режиме живых обоев",
+        "Снег со значков можно сбить мышью, а из снега слепить снежок и бросить",
+        "Снегоуборщик выезжает, только когда на дороге намело слишком много"
+      ],
+      "en": [
+        "Snow piles up on desktop icons in live wallpaper mode",
+        "Knock the snow off with the mouse, or make a snowball and throw it",
+        "The plow only sets out once the road is snowed in"
+      ]
+    }
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-11-22T17:44:08.910Z",
     "changes": {
       "ru": [
         "Два режима: живые обои и слой поверх окон",

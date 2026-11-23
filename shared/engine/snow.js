@@ -4,6 +4,9 @@ const MAX_FLAKES = 1100;
 const MAX_SPRAY = 170;
 const COLUMN = 5;
 const GRAVITY = 320;
+// Road snow in scene units: how deep it may get and how fast it grows at 100 % snow.
+const COVER_LIMIT = 30;
+const COVER_GROWTH = 0.14;
 
 export class Snowfall {
   flakes = [];
@@ -56,6 +59,7 @@ export class SnowCover {
   spray = [];
 
   resize(width, unit) {
+    this.unit = unit;
     this.heights = Float32Array.from(
       { length: Math.ceil(width / COLUMN) + 2 },
       (_, i) => (7 + Math.sin(i * 0.07) * 2 + Math.sin(i * 0.23)) * unit,
@@ -63,11 +67,12 @@ export class SnowCover {
     this.spray.length = 0;
   }
 
-  update(dt, u, amount) {
-    const limit = 18 * u;
-    const growth = (amount / 100) * 1.1 * u * dt;
+  update(dt, u, amount, rate = 1) {
+    this.unit = u;
+    const limit = COVER_LIMIT * u;
+    const growth = (amount / 100) * COVER_GROWTH * rate * u * dt;
     for (let i = 0; i < this.heights.length; i++) {
-      this.heights[i] = Math.min(limit, this.heights[i] + growth * (0.6 + 0.4 * Math.sin(i * 1.7) ** 2));
+      this.heights[i] = Math.min(limit, this.heights[i] + growth * (0.7 + 0.3 * Math.sin(i * 0.13) ** 2));
     }
     for (const s of this.spray) {
       s.vy += GRAVITY * u * dt;
@@ -76,6 +81,44 @@ export class SnowCover {
       s.life -= dt;
     }
     this.spray = this.spray.filter((s) => s.life > 0);
+  }
+
+  /** Average depth in scene units, which decides when the plow is needed. */
+  depth() {
+    if (!this.heights.length || !this.unit) return 0;
+    let sum = 0;
+    for (const height of this.heights) sum += height;
+    return sum / this.heights.length / this.unit;
+  }
+
+  heightAt(x) {
+    const i = Math.round(x / COLUMN);
+    return i >= 0 && i < this.heights.length ? this.heights[i] : 0;
+  }
+
+  /** Piles snow up around x, highest in the middle. */
+  add(x, amount) {
+    const limit = COVER_LIMIT * (this.unit || 1);
+    const radius = 4;
+    const middle = Math.round(x / COLUMN);
+    for (let i = middle - radius; i <= middle + radius; i++) {
+      if (i < 0 || i >= this.heights.length) continue;
+      const share = (1 - Math.abs(i - middle) / (radius + 1)) / 3;
+      this.heights[i] = Math.min(limit, this.heights[i] + amount * share);
+    }
+  }
+
+  /** Scoops snow from around x and returns how much was taken. */
+  take(x, amount) {
+    const middle = Math.round(x / COLUMN);
+    let taken = 0;
+    for (let i = middle - 3; i <= middle + 3 && taken < amount; i++) {
+      if (i < 0 || i >= this.heights.length) continue;
+      const part = Math.min(this.heights[i] * 0.5, (amount - taken) / 2);
+      this.heights[i] -= part;
+      taken += part;
+    }
+    return taken;
   }
 
   /** Clears whatever the blade passed over between two frames. */

@@ -46,6 +46,12 @@ function apply(next) {
 }
 
 api.onChange(apply);
+// Desktop icons and the mouse over them, in this window's pixels.
+api.onDesktop((desktop) => {
+  if (!scene) return;
+  if (desktop.icons) scene.setIcons(desktop.icons);
+  if ('pointer' in desktop) scene.setPointer(desktop.pointer);
+});
 apply(await api.get());
 
 new ResizeObserver(() => scene?.resize()).observe(canvas);

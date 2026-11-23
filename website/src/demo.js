@@ -10,7 +10,8 @@ export function initDemo() {
   const buttons = document.querySelectorAll('[data-period]');
 
   // Browsers restore slider positions after a reload, so read them first.
-  const scene = new WinterScene(canvas, { period: 'evening', snow: snow.valueAsNumber, wind: wind.valueAsNumber });
+  // Snow on the road builds up faster than in the app, so visitors see the plow come out.
+  const scene = new WinterScene(canvas, { period: 'evening', snow: snow.valueAsNumber, wind: wind.valueAsNumber, coverRate: 5 });
   scene.advance(1 / 30);
   scene.render();
   let onScreen = true;

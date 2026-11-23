@@ -1,8 +1,10 @@
 // One scene window per monitor, either behind the icons or above every window.
 import { BrowserWindow, powerMonitor, screen } from 'electron';
+import { Worker } from 'node:worker_threads';
 import * as win32 from './win32.js';
 import { ORIGIN } from './offline.js';
 import { sceneActivity } from './visibility.js';
+import { iconsFor, pointerFor } from './desktop-map.js';
 
 const CHECK_EVERY = 1500;
 // Explorer may still be starting when we are launched with Windows.
@@ -13,6 +15,10 @@ export class Scenes {
   paused = false;
   away = false;
   failures = 0;
+  icons = []; // desktop icons in physical screen pixels
+  watcher = null;
+  watching = false;
+  watcherBroken = false; // a failed watcher is not restarted every few seconds
 
   constructor({ preload, getSettings, onWallpaperFailed }) {
     Object.assign(this, { preload, getSettings, onWallpaperFailed });
@@ -74,6 +80,8 @@ export class Scenes {
       window,
       id: window.webContents.id,
       monitor: screen.dipToScreenRect(null, display.bounds),
+      scale: display.scaleFactor,
+      pointer: false,
       // The taskbar hides the bottom of the wallpaper.
       inset: overlay ? 0 : Math.max(0, display.bounds.y + display.bounds.height - display.workArea.y - display.workArea.height),
       overlay,
@@ -104,6 +112,7 @@ export class Scenes {
       this.failures = 0;
     }
     scene.ready = true;
+    this.sendDesktop(scene, { icons: iconsFor(this.icons, scene) });
     this.check();
   }
 
@@ -126,6 +135,7 @@ export class Scenes {
     const window = win32.foregroundWindow();
     const exclusive = win32.exclusiveFullscreen();
     const monitors = this.scenes.map((s) => s.monitor);
+    let watch = false;
 
     for (const scene of this.scenes) {
       if (!scene.ready) continue;
@@ -144,7 +154,65 @@ export class Scenes {
         scene.running = running;
         this.send(scene);
       }
+      watch ||= running && !scene.overlay && settings.iconSnow;
     }
+    this.watch(watch, settings.iconSnow);
+  }
+
+  /**
+   * Starts or stops reading the desktop icons and the mouse.
+   * A pause keeps the snow on the icons, turning the option off clears it.
+   */
+  watch(on, keep) {
+    if (!keep && this.icons.length) {
+      this.icons = [];
+      for (const scene of this.scenes) this.sendDesktop(scene, { icons: [] });
+    }
+    if (on === this.watching) return;
+    this.watching = on;
+    if (on && !this.watcher) {
+      if (this.watcherBroken) return;
+      try {
+        this.watcher = new Worker(new URL('./desktop-watch.js', import.meta.url));
+        this.watcher.on('message', (message) => this.desktopMessage(message));
+        this.watcher.on('error', (error) => {
+          this.watcherBroken = true;
+          console.error('Desktop watcher failed:', error);
+        });
+        this.watcher.on('exit', () => {
+          this.watcher = null;
+          this.watching = false;
+        });
+      } catch (error) {
+        this.watcherBroken = true;
+        console.error('Desktop watcher did not start:', error);
+        return;
+      }
+    }
+    this.watcher?.postMessage({ type: 'active', value: on });
+    if (!on) {
+      for (const scene of this.scenes) this.sendDesktop(scene, { pointer: null });
+    }
+  }
+
+  desktopMessage({ type, value }) {
+    if (!this.watching) return;
+    if (type === 'icons') {
+      this.icons = value;
+      for (const scene of this.scenes) this.sendDesktop(scene, { icons: iconsFor(value, scene) });
+    } else if (type === 'pointer') {
+      for (const scene of this.scenes) {
+        const pointer = pointerFor(value, scene);
+        // Only the monitor under the mouse gets a stream of updates.
+        if (pointer || scene.pointer) this.sendDesktop(scene, { pointer });
+        scene.pointer = Boolean(pointer);
+      }
+    }
+  }
+
+  sendDesktop(scene, desktop) {
+    if (scene.overlay || !scene.ready || scene.window.isDestroyed()) return;
+    scene.window.webContents.send('scene:desktop', desktop);
   }
 
   stateFor(webContentsId) {
@@ -184,6 +252,8 @@ export class Scenes {
 
   dispose() {
     clearInterval(this.timer);
+    this.watcher?.terminate();
+    this.watcher = null;
     clearTimeout(this.rebuildTimer);
     this.clear();
   }
