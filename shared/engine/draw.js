@@ -68,3 +68,42 @@ export function disc(g, x, y, radius, fill) {
   g.fillStyle = fill;
   g.fill();
 }
+
+export const CLUMP_TURNS = 16;
+
+/**
+ * Snowflake pictures: crisp and soft dots, out-of-focus discs for flakes close to the
+ * viewer, and clumps of crystals stuck together the way big wet flakes look.
+ */
+export function flakeSprites(color = '#f4f9ff') {
+  const bokeh = surface(64, 64);
+  const b = bokeh.getContext('2d');
+  const gradient = b.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, alpha(color, 0.7));
+  gradient.addColorStop(0.55, alpha(color, 0.55));
+  gradient.addColorStop(0.8, alpha(color, 0.2));
+  gradient.addColorStop(1, alpha(color, 0));
+  b.fillStyle = gradient;
+  b.fillRect(0, 0, 64, 64);
+
+  // Each clump is drawn ahead in every turn it can take while it tumbles, so a frame only copies pictures.
+  const dot = softDot(color, 0.45);
+  const clumps = [0, 1, 2].map((seed) => {
+    const next = random(seed * 977 + 13);
+    const parts = Array.from({ length: 5 + Math.floor(next() * 4) }, () => ({
+      angle: next() * TAU, distance: next() * 13, size: 16 + next() * 16, alpha: 0.65 + next() * 0.35,
+    }));
+    return Array.from({ length: CLUMP_TURNS }, (_, turn) => {
+      const canvas = surface(64, 64);
+      const g = canvas.getContext('2d');
+      for (const part of parts) {
+        const angle = part.angle + (turn / CLUMP_TURNS) * TAU;
+        g.globalAlpha = part.alpha;
+        g.drawImage(dot, 32 + Math.cos(angle) * part.distance - part.size / 2, 32 + Math.sin(angle) * part.distance - part.size / 2, part.size, part.size);
+      }
+      return canvas;
+    });
+  });
+
+  return { sharp: softDot(color, 0.55), soft: softDot(color, 0.3), bokeh, clumps };
+}

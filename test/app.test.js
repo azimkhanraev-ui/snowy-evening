@@ -73,3 +73,13 @@ test('autostart quotes paths with spaces and touches only its own value', () => 
   assert.equal(add[add.indexOf('/d') + 1], '"C:\\My Apps\\Snowy Evening.exe" --autostart');
   for (const args of [add, autostartArguments(false)]) assert.equal(args[args.indexOf('/v') + 1], 'SnowyEvening');
 });
+
+test('the snow above the windows rests with the wallpaper under a maximized window, hides in games', () => {
+  const front = (changes) => activity({ layer: 'front', ...changes });
+  assert.deepEqual(front({}), { visible: true, running: true });
+  assert.deepEqual(front({ window: maximized }), { visible: false, running: false });
+  assert.deepEqual(front({ window: maximized, monitor: right }), { visible: true, running: true });
+  assert.deepEqual(front({ window: game, monitor: right }), { visible: false, running: false });
+  assert.deepEqual(front({ paused: true }), { visible: false, running: false });
+  assert.deepEqual(front({ window: maximized, settings: { ...DEFAULT_SETTINGS, pauseWhenCovered: false } }), { visible: true, running: true });
+});

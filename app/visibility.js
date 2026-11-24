@@ -25,12 +25,18 @@ export function coversDesktop(window, monitor) {
 
 /**
  * Decides what one monitor's scene should do.
- * `monitor` is that monitor's rectangle, `monitors` all of them.
+ * `monitor` is that monitor's rectangle, `monitors` all of them. `layer` is 'wallpaper',
+ * 'overlay', or 'front': the snow above the windows that goes with the wallpaper.
  */
-export function sceneActivity({ settings, paused, away, exclusive, window, monitor, monitors }) {
-  const overlay = settings.mode === 'overlay';
+export function sceneActivity({ settings, paused, away, exclusive, window, monitor, monitors, layer = settings.mode }) {
+  const overlay = layer === 'overlay';
   const game = settings.pauseInGames && (exclusive || monitors.some((m) => isFullscreen(window, m)));
   const covered = !overlay && settings.pauseWhenCovered && coversDesktop(window, monitor);
+  if (layer === 'front') {
+    // Snow on windows is for windows that leave the desktop in sight: a maximized window hides it too.
+    const running = !(paused || away || game || covered);
+    return { visible: running, running };
+  }
   return {
     // A paused overlay would leave frozen snow over the user's work, so it is hidden.
     visible: !(overlay && (paused || game)),

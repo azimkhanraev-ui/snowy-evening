@@ -1,6 +1,6 @@
-import { TAU, clamp } from './draw.js';
+import { CLUMP_TURNS, TAU, clamp } from './draw.js';
 
-const MAX_FLAKES = 1100;
+const MAX_FLAKES = 1400;
 const MAX_SPRAY = 170;
 const COLUMN = 5;
 const GRAVITY = 320;
@@ -8,30 +8,88 @@ const GRAVITY = 320;
 const COVER_LIMIT = 30;
 const COVER_GROWTH = 0.14;
 
+// Most flakes are far away: depth z is spread as random ** DEPTH_SPREAD.
+const DEPTH_SPREAD = 1.6;
+// Flakes in front of the focus are big, blurred discs.
+const BOKEH_FROM = 0.88;
+const LAYERS = { all: [0, 1], far: [0, 0.5], near: [0.5, 1] };
+
+/** Share of all flakes whose depth falls inside [from, to]. */
+const shareOf = ([from, to]) => to ** (1 / DEPTH_SPREAD) - from ** (1 / DEPTH_SPREAD);
+
+/**
+ * Falling snow with depth: far flakes are small, faint and slow, near ones big and fast,
+ * a few pass right in front of the viewer out of focus. Each flake sways at its own pace
+ * and the wind comes in gusts. `layer` keeps only the far or the near part, so a scene behind
+ * the windows and one above them share one snowfall between them.
+ */
 export class Snowfall {
   flakes = [];
 
-  update(dt, time, { w, h, u }, amount, wind) {
-    const wanted = Math.min(MAX_FLAKES, Math.round(((w * h) / 2200) * (amount / 100)));
+  constructor(layer = 'all') {
+    this.layer = layer;
+  }
+
+  setLayer(layer) {
+    if (layer === this.layer) return;
+    this.layer = layer;
+    this.flakes.length = 0; // refilled on the next update
+  }
+
+  spawn(w, h, anywhere) {
+    const [from, to] = LAYERS[this.layer] ?? LAYERS.all;
+    const lo = from ** (1 / DEPTH_SPREAD);
+    const hi = to ** (1 / DEPTH_SPREAD);
+    const z = (lo + Math.random() * (hi - lo)) ** DEPTH_SPREAD;
+    const bokeh = z >= BOKEH_FROM;
+    const clump = !bokeh && z > 0.45 && Math.random() < 0.3;
+    return {
+      x: Math.random() * w,
+      y: anywhere ? Math.random() * h : -12 - Math.random() * 30,
+      z,
+      kind: bokeh ? 'bokeh' : clump ? 'clump' : z < 0.3 ? 'sharp' : 'soft',
+      sprite: Math.floor(Math.random() * 3),
+      size: (1.4 + 8.5 * z ** 1.4) * (0.75 + Math.random() * 0.5) * (bokeh ? 2.2 : clump ? 1.35 : 1),
+      fall: (14 + 88 * z) * (0.8 + Math.random() * 0.4) * (clump ? 1.15 : 1),
+      sway: 6 + Math.random() * 20,
+      pace: 0.5 + Math.random() * 1.3,
+      phase: Math.random() * TAU,
+      turn: 0,
+      spin: (Math.random() - 0.5) * 2.4,
+      alpha: bokeh ? 0.28 + Math.random() * 0.2 : 0.3 + 0.65 * z,
+    };
+  }
+
+  /** `land(flake, previousY)` may catch a flake on a surface; it then starts again at the top. */
+  update(dt, time, { w, h, u }, amount, wind, land = null) {
+    const range = LAYERS[this.layer] ?? LAYERS.all;
+    const wanted = Math.min(MAX_FLAKES, Math.round(((w * h) / 2200) * (amount / 100) * shareOf(range)));
     if (this.flakes.length > wanted) this.flakes.length = wanted;
-    while (this.flakes.length < wanted) {
-      this.flakes.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        depth: 0.2 + Math.random() ** 2 * 0.8,
-        phase: Math.random() * TAU,
-      });
-    }
+    while (this.flakes.length < wanted) this.flakes.push(this.spawn(w, h, true));
+
     const speed = Math.max(u, 0.6);
+    // The wind rises and falls in gusts and now and then almost calms down.
+    const gust = 1 + 0.55 * Math.sin(time * 0.23) * Math.sin(time * 0.71 + 1.3) + 0.2 * Math.sin(time * 1.9);
+    const margin = 40;
     for (const f of this.flakes) {
-      f.y += (22 + 80 * f.depth) * speed * dt;
-      f.x += (wind * 2.6 * f.depth + Math.sin(time * 1.2 + f.phase) * 14) * speed * dt;
-      if (f.y > h + 8) {
-        f.y = -8;
-        f.x = Math.random() * w;
+      const before = f.y;
+      const flutter = 1 + 0.18 * Math.sin(time * f.pace * 1.7 + f.phase);
+      f.y += f.fall * flutter * speed * dt;
+      const drift = wind * 2.4 * (0.35 + 0.8 * f.z) * gust;
+      const eddy = 10 * Math.sin(f.y * 0.011 + time * 0.8 + f.phase);
+      f.x += (drift + eddy + f.sway * Math.sin(time * f.pace + f.phase)) * speed * dt;
+      if (f.kind === 'clump') f.turn += f.spin * dt;
+
+      if (f.y > h + margin || (land && f.y > 0 && land(f, before))) {
+        Object.assign(f, this.spawn(w, h, false));
+        // In a strong wind new flakes also come in from the side it blows from.
+        if (Math.abs(wind) > 20 && Math.random() < 0.35) {
+          f.x = wind > 0 ? -Math.random() * margin : w + Math.random() * margin;
+          f.y = Math.random() * h * 0.6;
+        }
       }
-      if (f.x < -8) f.x += w + 16;
-      else if (f.x > w + 8) f.x -= w + 16;
+      if (f.x < -margin) f.x += w + margin * 2;
+      else if (f.x > w + margin) f.x -= w + margin * 2;
     }
   }
 
@@ -42,12 +100,15 @@ export class Snowfall {
     }
   }
 
-  draw(g, { u }, dot) {
+  draw(g, { u }, sprites) {
     const scale = Math.max(u, 0.6);
     for (const f of this.flakes) {
-      const size = (2.5 + f.depth * 7) * scale;
-      g.globalAlpha = 0.3 + f.depth * 0.65;
-      g.drawImage(dot, f.x - size / 2, f.y - size / 2, size, size);
+      const size = f.size * scale;
+      g.globalAlpha = f.alpha;
+      const picture = f.kind === 'clump'
+        ? sprites.clumps[f.sprite][(((Math.round((f.turn / TAU) * CLUMP_TURNS)) % CLUMP_TURNS) + CLUMP_TURNS) % CLUMP_TURNS]
+        : sprites[f.kind];
+      g.drawImage(picture, f.x - size / 2, f.y - size / 2, size, size);
     }
     g.globalAlpha = 1;
   }

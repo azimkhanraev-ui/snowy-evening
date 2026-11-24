@@ -1,4 +1,4 @@
-// Worker thread: reads where the desktop icons are and what the mouse does over the desktop.
+// Worker thread: reads where the desktop icons and the open windows are, and what the mouse does.
 // Read-only: it never moves icons or intercepts clicks. It runs apart from the main thread
 // because a call into a hung Explorer would otherwise freeze the tray icon too.
 import { parentPort } from 'node:worker_threads';
@@ -6,6 +6,7 @@ import koffi from 'koffi';
 
 const ole32 = koffi.load('ole32.dll');
 const user32 = koffi.load('user32.dll');
+const dwmapi = koffi.load('dwmapi.dll');
 
 const POINT = koffi.struct('POINT', { x: 'int32_t', y: 'int32_t' });
 const CoInitializeEx = ole32.func('long __stdcall CoInitializeEx(void *reserved, uint32_t flags)');
@@ -20,6 +21,15 @@ const GetCursorPos = user32.func('int __stdcall GetCursorPos(_Out_ POINT *point)
 const WindowFromPoint = user32.func('intptr_t __stdcall WindowFromPoint(POINT point)');
 const GetAsyncKeyState = user32.func('int16_t __stdcall GetAsyncKeyState(int key)');
 const GetSystemMetrics = user32.func('int __stdcall GetSystemMetrics(int index)');
+const GetTopWindow = user32.func('intptr_t __stdcall GetTopWindow(intptr_t hwnd)');
+const GetWindow = user32.func('intptr_t __stdcall GetWindow(intptr_t hwnd, uint32_t cmd)');
+const IsIconic = user32.func('int __stdcall IsIconic(intptr_t hwnd)');
+const IsZoomed = user32.func('int __stdcall IsZoomed(intptr_t hwnd)');
+const GetWindowLong = user32.func('intptr_t __stdcall GetWindowLongPtrW(intptr_t hwnd, int index)');
+const GetWindowRect = user32.func('int __stdcall GetWindowRect(intptr_t hwnd, _Out_ int32_t *rect)');
+const GetClassName = user32.func('int __stdcall GetClassNameW(intptr_t hwnd, _Out_ uint16_t *name, int max)');
+const GetWindowThreadProcessId = user32.func('uint32_t __stdcall GetWindowThreadProcessId(intptr_t hwnd, _Out_ uint32_t *pid)');
+const DwmGetWindowAttribute = dwmapi.func('long __stdcall DwmGetWindowAttribute(intptr_t hwnd, uint32_t attribute, void *value, uint32_t size)');
 
 // Explorer refuses these calls from a multithreaded apartment (RPC_E_CANTCALLOUT_ININPUTSYNCCALL).
 const COINIT_APARTMENTTHREADED = 2;
@@ -33,7 +43,26 @@ const VK = { LBUTTON: 1, RBUTTON: 2, MBUTTON: 4 };
 // The icon picture starts a little below the position Explorer reports.
 const ICON_TOP_PADDING = 4;
 
+const GW_HWNDNEXT = 2;
+const GWL_EXSTYLE = -20;
+const WS_EX_TRANSPARENT = 0x20;
+const WS_EX_TOOLWINDOW = 0x80;
+const WS_EX_APPWINDOW = 0x40000;
+const WS_EX_NOACTIVATE = 0x8000000;
+const DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+const DWMWA_CLOAKED = 14;
+const MIN_WIDTH = 100;
+const MIN_HEIGHT = 50;
+const MAX_WINDOWS = 60;
+// Shell surfaces, menus and tooltips are not windows snow could rest on.
+const SKIPPED_CLASSES = new Set([
+  'Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd', 'NotifyIconOverflowWindow',
+  '#32768', 'tooltips_class32', 'Windows.UI.Core.CoreWindow', 'XamlExplorerHostIslandWindow',
+  'TopLevelWindowForOverflowXamlIsland', 'ForegroundStaging', 'MultitaskingViewFrame',
+]);
+
 const ICONS_EVERY = 700;
+const WINDOWS_EVERY = 100;
 const POINTER_EVERY = 33;
 const IDLE_EVERY = 500;
 
@@ -121,8 +150,10 @@ function openDesktopView() {
 }
 
 let desktop = null;
-let active = false;
+let wants = { icons: false, windows: false };
 let lastIcons = '';
+let lastWindows = '';
+let lastWindowsAt = 0;
 let lastPointer = '';
 let lastIconsAt = 0;
 
@@ -172,10 +203,51 @@ function closeDesktop() {
   desktop = null;
 }
 
+const className = (hwnd) => {
+  const name = new Uint16Array(64);
+  const length = GetClassName(hwnd, name, 64);
+  return String.fromCharCode(...name.subarray(0, Math.max(0, length)));
+};
+
+/** Visible windows from the topmost down: [{ id, x, y, w, h, cap }] in physical pixels. */
+function readWindows() {
+  const windows = [];
+  const cloaked = Buffer.alloc(4);
+  const bounds = Buffer.alloc(16);
+  let hwnd = GetTopWindow(0);
+  for (let n = 0; hwnd && n < 3000 && windows.length < MAX_WINDOWS; n++, hwnd = GetWindow(hwnd, GW_HWNDNEXT)) {
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) continue;
+    const style = Number(GetWindowLong(hwnd, GWL_EXSTYLE)) >>> 0;
+    if (style & (WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)) continue; // click-through overlays, like our own
+    if (style & WS_EX_TOOLWINDOW && !(style & WS_EX_APPWINDOW)) continue;
+    // Windows on another virtual desktop or suspended apps are "cloaked": present but not shown.
+    if (DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloaked, 4) === 0 && cloaked.readUInt32LE(0)) continue;
+    const pid = [0];
+    GetWindowThreadProcessId(hwnd, pid);
+    if (pid[0] === process.pid) continue;
+    if (SKIPPED_CLASSES.has(className(hwnd))) continue;
+
+    let left, top, right, bottom;
+    // The visible frame, without the invisible resize borders around it.
+    if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, bounds, 16) === 0) {
+      [left, top, right, bottom] = [0, 4, 8, 12].map((at) => bounds.readInt32LE(at));
+    } else {
+      const rect = [0, 0, 0, 0];
+      if (!GetWindowRect(hwnd, rect)) continue;
+      [left, top, right, bottom] = rect;
+    }
+    if (right - left < MIN_WIDTH || bottom - top < MIN_HEIGHT) continue;
+    windows.push({ id: hwnd, x: left, y: top, w: right - left, h: bottom - top, cap: !IsZoomed(hwnd) });
+  }
+  return windows;
+}
+
 function readPointer() {
   const point = {};
-  if (!desktop || !GetCursorPos(point)) return null;
-  if (WindowFromPoint(point) !== desktop.list) return null; // a window or the taskbar is under it
+  if (!GetCursorPos(point)) return null;
+  // Over the bare desktop, not a window or the taskbar.
+  const onDesktop = Boolean(wants.icons && desktop && WindowFromPoint(point) === desktop.list);
+  if (!onDesktop && !wants.windows) return null;
   const swapped = GetSystemMetrics(SM_SWAPBUTTON) !== 0;
   // GetAsyncKeyState reports physical buttons.
   const down = (key) => (GetAsyncKeyState(key) & 0x8000) !== 0;
@@ -184,6 +256,7 @@ function readPointer() {
     y: point.y,
     primary: down(swapped ? VK.RBUTTON : VK.LBUTTON),
     middle: down(VK.MBUTTON),
+    desktop: onDesktop,
   };
 }
 
@@ -195,28 +268,31 @@ function send(type, value, last) {
 }
 
 function tick() {
-  if (!active) {
+  if (!wants.icons && !wants.windows) {
     setTimeout(tick, IDLE_EVERY);
     return;
   }
   const now = Date.now();
-  if (now - lastIconsAt >= ICONS_EVERY) {
+  if (wants.icons && now - lastIconsAt >= ICONS_EVERY) {
     lastIconsAt = now;
     lastIcons = send('icons', readIcons(), lastIcons);
+  }
+  if (wants.windows && now - lastWindowsAt >= WINDOWS_EVERY) {
+    lastWindowsAt = now;
+    lastWindows = send('windows', readWindows(), lastWindows);
   }
   lastPointer = send('pointer', readPointer(), lastPointer);
   setTimeout(tick, POINTER_EVERY);
 }
 
 parentPort.on('message', (message) => {
-  if (message.type !== 'active') return;
-  active = message.value;
-  if (!active) {
-    // Fresh data is sent once it starts again.
-    lastIcons = '';
-    lastPointer = '';
-    lastIconsAt = 0;
-  }
+  if (message.type !== 'watch') return;
+  const before = wants;
+  wants = { icons: Boolean(message.value.icons), windows: Boolean(message.value.windows) };
+  // Whatever starts again sends fresh data at once.
+  if (!wants.icons || !before.icons) [lastIcons, lastIconsAt] = ['', 0];
+  if (!wants.windows || !before.windows) [lastWindows, lastWindowsAt] = ['', 0];
+  lastPointer = '';
 });
 
 CoInitializeEx(null, COINIT_APARTMENTTHREADED);

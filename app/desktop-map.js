@@ -13,13 +13,27 @@ export function iconsFor(icons, { monitor, scale }) {
     }));
 }
 
-/** The mouse, when it is over this scene's monitor. */
-export function pointerFor(pointer, { monitor, scale }) {
-  if (!pointer || !inside(pointer.x, pointer.y, monitor)) return null;
+/** The mouse, when it is over this scene window. */
+export function pointerFor(pointer, { monitor, area = monitor, scale }) {
+  if (!pointer || !inside(pointer.x, pointer.y, area)) return null;
   return {
-    x: (pointer.x - monitor.x) / scale,
-    y: (pointer.y - monitor.y) / scale,
+    x: (pointer.x - area.x) / scale,
+    y: (pointer.y - area.y) / scale,
     primary: pointer.primary,
     middle: pointer.middle,
   };
+}
+
+/** Windows that reach into this scene window, topmost first, in its pixels. */
+export function windowsFor(windows, { monitor, area = monitor, scale }) {
+  return windows
+    .filter((win) => win.x < area.x + area.width && win.x + win.w > area.x && win.y < area.y + area.height && win.y + win.h > area.y)
+    .map((win) => ({
+      id: win.id,
+      x: (win.x - area.x) / scale,
+      y: (win.y - area.y) / scale,
+      w: win.w / scale,
+      h: win.h / scale,
+      cap: win.cap,
+    }));
 }

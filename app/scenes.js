@@ -1,10 +1,12 @@
 // One scene window per monitor, either behind the icons or above every window.
+// With snow on windows, the wallpaper also gets a light layer above the windows per monitor:
+// the near flakes fall there and settle on the window edges.
 import { BrowserWindow, powerMonitor, screen } from 'electron';
 import { Worker } from 'node:worker_threads';
 import * as win32 from './win32.js';
 import { ORIGIN } from './offline.js';
 import { sceneActivity } from './visibility.js';
-import { iconsFor, pointerFor } from './desktop-map.js';
+import { iconsFor, pointerFor, windowsFor } from './desktop-map.js';
 
 const CHECK_EVERY = 1500;
 // Explorer may still be starting when we are launched with Windows.
@@ -16,8 +18,9 @@ export class Scenes {
   away = false;
   failures = 0;
   icons = []; // desktop icons in physical screen pixels
+  windows = []; // open windows in physical screen pixels, topmost first
   watcher = null;
-  watching = false;
+  watching = null; // what the watcher reads: { icons, windows }
   watcherBroken = false; // a failed watcher is not restarted every few seconds
 
   constructor({ preload, getSettings, onWallpaperFailed }) {
@@ -41,13 +44,17 @@ export class Scenes {
 
   build() {
     this.clear();
-    const { mode } = this.getSettings();
+    const { mode, windowSnow } = this.getSettings();
     this.mode = mode;
-    this.scenes = screen.getAllDisplays().map((display) => this.create(display, mode));
+    this.windowSnow = windowSnow;
+    const displays = screen.getAllDisplays();
+    this.scenes = displays.map((display) => this.create(display, mode === 'overlay' ? 'overlay' : 'wallpaper'));
+    if (mode === 'wallpaper' && windowSnow) this.scenes.push(...displays.map((display) => this.create(display, 'front')));
   }
 
-  create(display, mode) {
-    const overlay = mode === 'overlay';
+  /** `layer` is 'wallpaper', 'overlay', or 'front' (only the near snow, above the windows). */
+  create(display, layer) {
+    const overlay = layer !== 'wallpaper';
     const bounds = overlay ? display.workArea : display.bounds;
     const window = new BrowserWindow({
       ...bounds,
@@ -66,7 +73,7 @@ export class Scenes {
       focusable: false,
       skipTaskbar: true,
       enableLargerThanScreen: true,
-      title: 'Snowy Evening scene',
+      title: layer === 'front' ? 'Snowy Evening snow' : 'Snowy Evening scene',
       webPreferences: {
         preload: this.preload,
         sandbox: true,
@@ -80,6 +87,8 @@ export class Scenes {
       window,
       id: window.webContents.id,
       monitor: screen.dipToScreenRect(null, display.bounds),
+      area: screen.dipToScreenRect(null, bounds), // what the window covers, in physical pixels
+      layer,
       scale: display.scaleFactor,
       pointer: false,
       // The taskbar hides the bottom of the wallpaper.
@@ -112,7 +121,8 @@ export class Scenes {
       this.failures = 0;
     }
     scene.ready = true;
-    this.sendDesktop(scene, { icons: iconsFor(this.icons, scene) });
+    if (scene.overlay) this.sendDesktop(scene, { windows: windowsFor(this.windows, scene) });
+    else this.sendDesktop(scene, { icons: iconsFor(this.icons, scene) });
     this.check();
   }
 
@@ -135,12 +145,14 @@ export class Scenes {
     const window = win32.foregroundWindow();
     const exclusive = win32.exclusiveFullscreen();
     const monitors = this.scenes.map((s) => s.monitor);
-    let watch = false;
+    const watch = { icons: false, windows: false };
 
     for (const scene of this.scenes) {
       if (!scene.ready) continue;
       const { visible, running } = sceneActivity({
-        settings, paused: this.paused, away: this.away, exclusive, window, monitor: scene.monitor, monitors,
+        settings,
+        layer: scene.layer,
+        paused: this.paused, away: this.away, exclusive, window, monitor: scene.monitor, monitors,
       });
       if (scene.overlay && visible !== scene.window.isVisible()) {
         if (visible) {
@@ -154,22 +166,29 @@ export class Scenes {
         scene.running = running;
         this.send(scene);
       }
-      watch ||= running && !scene.overlay && settings.iconSnow;
+      if (!running) continue;
+      if (scene.overlay) watch.windows ||= settings.windowSnow;
+      else watch.icons ||= settings.iconSnow;
     }
-    this.watch(watch, settings.iconSnow);
+    this.watch(watch, settings);
   }
 
   /**
-   * Starts or stops reading the desktop icons and the mouse.
-   * A pause keeps the snow on the icons, turning the option off clears it.
+   * Starts or stops reading the desktop icons, the open windows and the mouse.
+   * A pause keeps the snow where it lies, turning an option off clears it.
    */
-  watch(on, keep) {
-    if (!keep && this.icons.length) {
+  watch(wanted, settings) {
+    if (!settings.iconSnow && this.icons.length) {
       this.icons = [];
       for (const scene of this.scenes) this.sendDesktop(scene, { icons: [] });
     }
-    if (on === this.watching) return;
-    this.watching = on;
+    if (!settings.windowSnow && this.windows.length) {
+      this.windows = [];
+      for (const scene of this.scenes) this.sendDesktop(scene, { windows: [] });
+    }
+    const on = wanted.icons || wanted.windows;
+    if (this.watching?.icons === wanted.icons && this.watching?.windows === wanted.windows) return;
+    if (!on && !this.watching) return;
     if (on && !this.watcher) {
       if (this.watcherBroken) return;
       try {
@@ -181,7 +200,7 @@ export class Scenes {
         });
         this.watcher.on('exit', () => {
           this.watcher = null;
-          this.watching = false;
+          this.watching = null;
         });
       } catch (error) {
         this.watcherBroken = true;
@@ -189,9 +208,13 @@ export class Scenes {
         return;
       }
     }
-    this.watcher?.postMessage({ type: 'active', value: on });
-    if (!on) {
-      for (const scene of this.scenes) this.sendDesktop(scene, { pointer: null });
+    this.watching = on ? { ...wanted } : null;
+    this.watcher?.postMessage({ type: 'watch', value: wanted });
+    for (const scene of this.scenes) {
+      if (scene.pointer && !(scene.overlay ? wanted.windows : wanted.icons)) {
+        scene.pointer = false;
+        this.sendDesktop(scene, { pointer: null });
+      }
     }
   }
 
@@ -199,10 +222,15 @@ export class Scenes {
     if (!this.watching) return;
     if (type === 'icons') {
       this.icons = value;
-      for (const scene of this.scenes) this.sendDesktop(scene, { icons: iconsFor(value, scene) });
+      for (const scene of this.scenes) if (!scene.overlay) this.sendDesktop(scene, { icons: iconsFor(value, scene) });
+    } else if (type === 'windows') {
+      this.windows = value;
+      for (const scene of this.scenes) if (scene.overlay) this.sendDesktop(scene, { windows: windowsFor(value, scene) });
     } else if (type === 'pointer') {
       for (const scene of this.scenes) {
-        const pointer = pointerFor(value, scene);
+        // The wallpaper only cares about the mouse over the bare desktop.
+        const wanted = scene.overlay ? this.watching.windows : this.watching.icons && value?.desktop;
+        const pointer = wanted ? pointerFor(value, scene) : null;
         // Only the monitor under the mouse gets a stream of updates.
         if (pointer || scene.pointer) this.sendDesktop(scene, { pointer });
         scene.pointer = Boolean(pointer);
@@ -211,14 +239,14 @@ export class Scenes {
   }
 
   sendDesktop(scene, desktop) {
-    if (scene.overlay || !scene.ready || scene.window.isDestroyed()) return;
+    if (!scene.ready || scene.window.isDestroyed()) return;
     scene.window.webContents.send('scene:desktop', desktop);
   }
 
   stateFor(webContentsId) {
     const scene = this.scenes.find((s) => s.id === webContentsId);
     if (!scene) return null;
-    return { settings: this.getSettings(), running: scene.running, inset: scene.inset, overlay: scene.overlay };
+    return { settings: this.getSettings(), running: scene.running, inset: scene.inset, overlay: scene.overlay, layer: scene.layer };
   }
 
   send(scene) {
@@ -226,7 +254,9 @@ export class Scenes {
   }
 
   settingsChanged() {
-    if (this.getSettings().mode !== this.mode) return this.build();
+    const { mode, windowSnow } = this.getSettings();
+    // The layer above the windows comes and goes with the option.
+    if (mode !== this.mode || (mode === 'wallpaper' && windowSnow !== this.windowSnow)) return this.build();
     for (const scene of this.scenes) this.send(scene);
     this.check();
   }

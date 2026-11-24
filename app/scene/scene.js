@@ -28,13 +28,25 @@ async function loadBackground(name) {
 function apply(next) {
   if (!next) return;
   state = next;
-  const { snow, wind, fps, plow, house, lights, background } = state.settings;
+  const { snow, wind, fps, plow, house, lights, background, windowSnow } = state.settings;
+  // 'wallpaper' behind the icons, 'overlay' above everything, or 'front': only the near snow
+  // above the windows, while the wallpaper below keeps the far snow.
+  const layer = state.layer ?? (state.overlay ? 'overlay' : 'wallpaper');
+  const front = layer === 'front';
   const options = {
-    snow, wind, fps, plow, house, lights,
+    snow, wind, fps,
+    plow: plow && !front,
+    house: house && !front,
+    lights: lights && !front,
+    cover: !front,
+    flakes: front ? 'near' : layer === 'wallpaper' && windowSnow ? 'far' : 'all',
+    windowSnow: layer !== 'wallpaper' && windowSnow,
+    icons: layer === 'wallpaper',
     period: currentPeriod(),
-    transparent: state.overlay,
+    transparent: layer !== 'wallpaper',
     bottomInset: state.inset,
-    maxPixelRatio: 1.25, // sharper is not visible behind icons and costs a lot of GPU
+    // Sharper is not visible behind icons and costs a lot of GPU; soft flakes above the windows need even less.
+    maxPixelRatio: front ? 1 : 1.25,
   };
 
   if (scene) scene.set(options);
@@ -46,10 +58,11 @@ function apply(next) {
 }
 
 api.onChange(apply);
-// Desktop icons and the mouse over them, in this window's pixels.
+// Desktop icons, open windows and the mouse, in this window's pixels.
 api.onDesktop((desktop) => {
   if (!scene) return;
   if (desktop.icons) scene.setIcons(desktop.icons);
+  if (desktop.windows) scene.setWindows(desktop.windows);
   if ('pointer' in desktop) scene.setPointer(desktop.pointer);
 });
 apply(await api.get());

@@ -1,10 +1,11 @@
-import { LIGHT_COLORS, clamp, disc, mix, softDot, surface } from './draw.js';
+import { LIGHT_COLORS, clamp, disc, flakeSprites, mix, softDot, surface } from './draw.js';
 import { DesktopSnow } from './desktop.js';
 import { PERIODS } from './periods.js';
 import { drawLandscape } from './landscape.js';
 import { CHIMNEY, drawHouse, drawHouseLights } from './house.js';
 import { BLADE_X, HALF_LENGTH, drawPlow } from './plow.js';
 import { SnowCover, Snowfall } from './snow.js';
+import { WindowSnow } from './windows.js';
 
 export { PERIODS, PERIOD_IDS, periodAt } from './periods.js';
 
@@ -23,6 +24,9 @@ const DEFAULTS = {
   bottomInset: 0, // space hidden behind the taskbar
   houseX: 0.8,
   maxPixelRatio: 1.5,
+  flakes: 'all', // 'far' behind the windows, 'near' in a layer above them
+  windowSnow: false, // snow settles on the open windows (a layer above them only)
+  icons: true, // snow on the desktop icons and snowballs (the wallpaper only)
 };
 
 // Options that need the cached background to be painted again.
@@ -37,11 +41,13 @@ export class WinterScene {
     this.canvas = canvas;
     this.g = canvas.getContext('2d');
     this.options = { ...DEFAULTS, ...options };
-    this.snowfall = new Snowfall();
+    this.snowfall = new Snowfall(this.options.flakes);
     this.cover = new SnowCover();
     this.desktop = new DesktopSnow();
+    this.windows = new WindowSnow();
     this.dots = {
       flake: softDot('#f4f9ff', 0.35),
+      flakes: flakeSprites(),
       smoke: softDot('#c5cfe2'),
       warm: softDot('#ffb84d'),
       lights: LIGHT_COLORS.map((color) => softDot(color)),
@@ -62,6 +68,8 @@ export class WinterScene {
     const changed = Object.keys(changes).filter((key) => changes[key] !== this.options[key]);
     if (!changed.length) return;
     Object.assign(this.options, changes);
+    if (changed.includes('flakes')) this.snowfall.setLayer(this.options.flakes);
+    if (changed.includes('windowSnow') && !this.options.windowSnow) this.windows = new WindowSnow();
 
     if (changed.includes('bottomInset') || changed.includes('transparent')) this.layout();
     if (changed.some((key) => REPAINT.includes(key))) {
@@ -165,9 +173,10 @@ export class WinterScene {
     if (!this.view) return;
     const { snow, wind, plow, cover, coverRate } = this.options;
     this.time += dt;
-    this.snowfall.update(dt, this.time, this.view, snow, wind);
+    this.snowfall.update(dt, this.time, this.view, snow, wind, this.options.windowSnow ? this.landing : null);
     if (cover) this.cover.update(dt, this.view.objectScale, snow, coverRate);
     this.desktop.update(dt, this.world());
+    if (this.options.windowSnow) this.windows.update(dt, { amount: snow, h: this.view.h });
     if (plow && cover) this.drive(dt);
     else this.truck.active = false;
     if (this.fade > 0) {
@@ -190,6 +199,16 @@ export class WinterScene {
     };
   }
 
+  // Near flakes settle on the windows, the far ones fall behind them.
+  landing = (flake, before) => flake.z > 0.55 && this.windows.land(flake.x, before, flake.y);
+
+  /** Open windows from the topmost down, [{ id, x, y, w, h, cap }] in canvas pixels. */
+  setWindows(list) {
+    if (!this.options.windowSnow) return;
+    this.windows.setWindows(list);
+    if (!this.running) this.render();
+  }
+
   /** Icon pictures on the desktop, [{ x, y, size }] in canvas pixels. */
   setIcons(icons) {
     this.desktop.setIcons(icons);
@@ -198,7 +217,8 @@ export class WinterScene {
 
   /** The mouse over the desktop, { x, y, primary, middle } or null. */
   setPointer(pointer) {
-    this.desktop.setPointer(pointer);
+    if (this.options.icons) this.desktop.setPointer(pointer);
+    if (this.options.windowSnow) this.windows.setPointer(pointer);
   }
 
   /** The plow only sets out when the road is snowed in, then crosses the screen once. */
@@ -233,6 +253,10 @@ export class WinterScene {
 
     g.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
     g.clearRect(0, 0, w, h);
+    const capColor = mix(period.snow[0], '#ffffff', 0.6);
+    const capShade = mix(period.snow[1], '#ffffff', 0.35);
+    // First, while the canvas is still empty: it erases what windows above cover.
+    if (options.windowSnow) this.windows.draw(g, capColor, capShade);
     if (!options.transparent || options.house) g.drawImage(this.still, 0, 0, w, h);
     if (this.previous) {
       g.globalAlpha = clamp(this.fade / FADE_SECONDS, 0, 1);
@@ -262,8 +286,8 @@ export class WinterScene {
     }
     if (options.cover) this.cover.drawSpray(g, dots.flake);
     // Brighter than the landscape snow, so it reads as snow on any wallpaper.
-    this.desktop.draw(g, mix(period.snow[0], '#ffffff', 0.6), mix(period.snow[1], '#ffffff', 0.35));
-    this.snowfall.draw(g, this.view, dots.flake);
+    this.desktop.draw(g, capColor, capShade);
+    this.snowfall.draw(g, this.view, dots.flakes);
   }
 
   drawSmoke() {

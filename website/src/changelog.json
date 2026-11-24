@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.2.0",
+    "date": null,
+    "changes": {
+      "ru": [
+        "Снег стал реалистичнее: глубина, размытые снежинки вблизи, хлопья, порывы ветра",
+        "Снег падает поверх окон и копится на их верхнем краю, а при перемещении окна слетает",
+        "Снег на окнах можно сбить быстрым движением мыши"
+      ],
+      "en": [
+        "More realistic snow: depth, blurred flakes up close, clumps and gusts of wind",
+        "Snow falls over your windows and piles up on their top edges, and falls off when a window moves",
+        "Swipe the mouse quickly to knock the snow off a window"
+      ]
+    }
+  },
+  {
     "version": "1.1.0",
     "date": "2026-11-24T13:21:15.000Z",
     "changes": {
